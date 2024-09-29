@@ -31,6 +31,31 @@ parser.add_argument('--save_path', default="checkpoints", type=str, help="path t
 parser.add_argument('--use_wandb', default=False, type=bool, help="use wandb")
 args = parser.parse_args()
 
+
+class EarlyStopping:
+    def __init__(self, patience=5, min_delta=0.001):
+        """
+        Args:
+            patience (int): how many epochs of no improvement until termination
+            min_delta (float): minimum difference in loss to qualify as improvement
+        """
+        self.patience = patience
+        self.min_delta = min_delta
+        self.best_loss = float('inf')
+        self.counter = 0
+
+    def __call__(self, loss):
+        if loss < self.best_loss - self.min_delta:
+            self.best_loss = loss
+            self.counter = 0
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True
+        return False
+
+
+
 def setseed(seed):
     # torch.backends.cudnn.deterministic = True
     rd.seed(seed)
@@ -245,6 +270,7 @@ def validate(net, val_loader, criterion, args, device, use_wandb, epoch):
             net.state_dict(),
             os.path.join(args.save_path, 'model_best_epoch_%d_accuracy_%.3f_loss_%.3f.pth' % (epoch, accuracy[0], total_loss / len(val_loader))))
 
+    return total_loss/ len(val_loader)
 
 def test(net, test_loader, criterion, args, device, use_wandb, epoch):
     """
@@ -282,8 +308,15 @@ def test(net, test_loader, criterion, args, device, use_wandb, epoch):
 
 for epoch in range(1, args.epochs + 1):
     train(model, trainloader, setup_optimizer, criterion, args, device, args.use_wandb, epoch, init)
-    validate(model, valloader, criterion, args, device, args.use_wandb, epoch)
+    val_loss = validate(model, valloader, criterion, args, device, args.use_wandb, epoch)
     lr_scheduler.step()
+    # Initialize the early stopping object
+    early_stopping = EarlyStopping(patience=5, min_delta=0.001)
+    if early_stopping(val_loss):
+        print("Early stopping")
+        # Test
+        test(model, testloader, criterion, args, device, args.use_wandb, epoch)
+        break
     # Test per 5 epoch
     if epoch % 5 == 0:
         test(model, testloader, setup_loss, args, device, args.use_wandb, epoch)

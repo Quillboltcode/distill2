@@ -138,28 +138,28 @@ class ResNet(nn.Module):
 
         # Using Convolution as linear projection to downsample attention_dw1 output to [1, 512, 6, 6]
         # Relu and  MaxPool2d can be remove to be the same as resnet downsample
-        self.attention_dw1 = nn.Sequential(
-            # CBAM(64*self.expans, 64*self.expans),
-            conv_1x1(64 * self.expans, 512 * self.expans, stride=1),
-            self._norm_layer(512*self.expans),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=8, stride=8)
-        )
-        self.attention_dw2 = nn.Sequential( 
-                            # CBAM(128*self.expans, 128*self.expans),
-                            conv_1x1(128*self.expans,512*self.expans,stride=1),
-                            self._norm_layer(512*self.expans),
-                            nn.ReLU(inplace=True),
-                            nn.MaxPool2d(kernel_size=4, stride=4)
-                            )  
+        # self.attention_dw1 = nn.Sequential(
+        #     # CBAM(64*self.expans, 64*self.expans),
+        #     conv_1x1(64 * self.expans, 512 * self.expans, stride=1),
+        #     self._norm_layer(512*self.expans),
+        #     nn.ReLU(inplace=True),
+        #     nn.MaxPool2d(kernel_size=8, stride=8)
+        # )
+        # self.attention_dw2 = nn.Sequential( 
+        #                     # CBAM(128*self.expans, 128*self.expans),
+        #                     conv_1x1(128*self.expans,512*self.expans,stride=1),
+        #                     self._norm_layer(512*self.expans),
+        #                     nn.ReLU(inplace=True),
+        #                     nn.MaxPool2d(kernel_size=4, stride=4)
+        #                     )  
                             
-        self.attention_dw3 = nn.Sequential( 
-                            # CBAM(256*self.expans, 256*self.expans),
-                            conv_1x1(256*self.expans,512*self.expans,stride=1),
-                            self._norm_layer(512*self.expans),
-                            nn.ReLU(inplace=True),
-                            nn.MaxPool2d(kernel_size=2, stride=2) 
-                            )
+        # self.attention_dw3 = nn.Sequential( 
+        #                     # CBAM(256*self.expans, 256*self.expans),
+        #                     conv_1x1(256*self.expans,512*self.expans,stride=1),
+        #                     self._norm_layer(512*self.expans),
+        #                     nn.ReLU(inplace=True),
+        #                     nn.MaxPool2d(kernel_size=2, stride=2) 
+        #                     )
         # last conv to down to num_classes
 #        self.last_conv = conv3x3(512*self.expans, num_classes)
         self.last_conv = nn.Linear(512*self.expans, num_classes)
@@ -229,9 +229,9 @@ class ResNet(nn.Module):
 
         x = self.layer1(x)
         out1 = x
-        att1 = self.attention_dw1(out1)
+        # att1 = self.attention_dw1(out1)
         out1 = self.block1_fgw(out1)
-        out1 = out1*att1
+        # out1 = out1*att1
         out1 = self.avgp(out1)
         out1 = out1.view((out1.shape[0], -1))
         fea1 = out1
@@ -239,11 +239,11 @@ class ResNet(nn.Module):
 
         x = self.layer2(x)
         out2 = x
-        att2 = self.attention_dw2(out2)
+        # att2 = self.attention_dw2(out2)
 #         print(att2.shape)
         out2 = self.block2_fgw(out2)
 #         print(out2.shape)
-        out2 = out2*att2
+        # out2 = out2*att2
         out2 = self.avgp(out2)
         out2 = out2.view((out2.shape[0], -1))
         fea2 = out2
@@ -251,11 +251,11 @@ class ResNet(nn.Module):
 
         x = self.layer3(x)
         out3 = x
-        att3 = self.attention_dw3(out3)
+        # att3 = self.attention_dw3(out3)
 #         print(att3.shape)
         out3 = self.block3_fgw(out3)
 #         print(out3.shape)
-        out3 = out3*att3
+        # out3 = out3*att3
         out3 = self.avgp(out3)
         out3 = out3.view((out3.shape[0], -1))
         fea3 = out3
