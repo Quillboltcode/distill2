@@ -16,6 +16,7 @@ parser.add_argument('--dataset', default="fer2013", type=str, help="fer2013 or f
 parser.add_argument('--dataset_path', default="data", type=str, help="path to dataset")
 parser.add_argument('--num_classes', default=7, type=int, help="number of classes",choices=[7, 100])
 parser.add_argument('--model', default="resnet18", type=str, help="resnet18 or resnet50" , choices=['resnet18', 'resnet50','resnet34','resnet101'])
+parser.add_argument('--num_workers', default=4, type=int, help="number of workers")
 parser.add_argument('--batch_size', default=256, type=int)
 parser.add_argument('--epochs', default=250, type=int, help="number of epochs to train for (should be 120 for FER2013 and 250 for CIFAR100)")
 parser.add_argument('--lr', default=0.1, type=float, help="initial learning rate")
@@ -26,6 +27,7 @@ parser.add_argument('--temp', default=3, type=float, help="temperature for softm
 parser.add_argument('--optimizer', default="SGD", type=str, help="optimizer", choices=['SGD', 'AdamW'])
 parser.add_argument('--loss_coeff', default=0.3, type=float, help="loss coefficient")
 parser.add_argument('--feature_loss_coeff', default=0.03, type=float, help="feature loss coefficient")
+parser.add_argument('--save_path', default="checkpoints", type=str, help="path to save checkpoints")
 parser.add_argument('--use_wandb', default=False, type=bool, help="use wandb")
 args = parser.parse_args()
 
@@ -51,7 +53,7 @@ def setup_model(model_name):
 
 def setup_loss(loss_name):
     if loss_name == "CrossEntropy":
-        loss_fn = loss.CrossEntropy
+        loss_fn = loss.CEDistill(args.temp)
     elif loss_name == "DistilKL":
         loss_fn = loss.DistilKL(args.temp)
     elif loss_name == "Loca":
@@ -74,21 +76,21 @@ def setup_dataloader():
         trainset = torchvision.datasets.ImageFolder(args.dataset_path+"/train", transform=augment.data_transforms_FER['train'])
         valset = torchvision.datasets.ImageFolder(args.dataset_path+"/val", transform=augment.data_transforms_FER['val'])
         testset = torchvision.datasets.ImageFolder(args.dataset_path+"/test", transform=augment.data_transforms_FER['test'])
-        trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=4)
-        valloader = torch.utils.data.DataLoader(valset, batch_size=args.batch_size, num_workers=4)
-        testloader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, num_workers=4)
+        trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+        valloader = torch.utils.data.DataLoader(valset, batch_size=args.batch_size, num_workers=args.num_workers)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, num_workers=args.num_workers)
     elif args.dataset == "ferplus":
         trainset = torchvision.datasets.ImageFolder(args.dataset_path+"/train", transform=augment.data_transforms_FER['train'])
         valset = torchvision.datasets.ImageFolder(args.dataset_path+"/val", transform=augment.data_transforms_FER['val'])
         testset = torchvision.datasets.ImageFolder(args.dataset_path+"/test", transform=augment.data_transforms_FER['test'])
-        trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=4)
-        valloader = torch.utils.data.DataLoader(valset, batch_size=args.batch_size, num_workers=4)
-        testloader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, num_workers=4)
+        trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+        valloader = torch.utils.data.DataLoader(valset, batch_size=args.batch_size, num_workers=args.num_workers)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, num_workers=args.num_workers)
     elif args.dataset == "cifar100":
         trainset = torchvision.datasets.CIFAR100(args.dataset_path, download=True,transform=augment.data_transforms_CIFAR['train'])
-        trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=4)
+        trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
         valset = torchvision.datasets.CIFAR100(args.dataset_path, download=True,transform=augment.data_transforms_CIFAR['val'])
-        valloader = torch.utils.data.DataLoader(valset, batch_size=args.batch_size, num_workers=4)
+        valloader = torch.utils.data.DataLoader(valset, batch_size=args.batch_size, num_workers=args.num_workers)
         testloader = valloader
     else:
         raise NotImplementedError
@@ -102,6 +104,7 @@ device = torch.device("cuda:"+str(args.gpu) if torch.cuda.is_available() else "c
 model = setup_model(args.model)
 model = model.to(device)
 setup_loss = setup_loss(args.loss)
+criterion = nn.CrossEntropyLoss()
 setup_optimizer = setup_optimizer(args.optimizer, model)
 lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(setup_optimizer, milestones=[args.epochs*1/3, args.epochs*2/3, args.epochs - 10], gamma=0.1)
 trainloader, valloader, testloader = setup_dataloader()
@@ -134,7 +137,7 @@ def train(net, trainloader, optimizer, criterion, args, device, use_wandb, epoch
                 layer_list.append(nn.Linear(student_feature_size, teacher_feature_size))
             net.adaptation_layers = nn.ModuleList(layer_list)
             net.adaptation_layers.cuda()
-            optimizer = torch.optim.AdamW(net.parameters(), lr=args['init_lr'], weight_decay=5e-4)
+            optimizer = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=5e-4)
             init = True
 
         loss = torch.FloatTensor([0.]).to(device)
@@ -146,12 +149,12 @@ def train(net, trainloader, optimizer, criterion, args, device, use_wandb, epoch
         
 
         for index in range(1, len(outputs)):
-            loss += loss_fn(outputs[index], teacher_output) * args['loss_coefficient']
-            loss += criterion(outputs[index], labels) * (1 - args['loss_coefficient'])
+            loss += loss_fn(outputs[index], teacher_output) * args.loss_coefficient
+            loss += criterion(outputs[index], labels) * (1 - args.loss_coefficient)
 
             if index != 1:
                 loss += torch.dist(net.adaptation_layers[index-1](outputs_feature[index]), teacher_feature) * \
-                        args['feature_loss_coefficient']
+                        args.feature_loss_coefficient
 
         sum_loss += loss.item()
         optimizer.zero_grad()
@@ -205,11 +208,11 @@ def validate(net, val_loader, criterion, args, device, use_wandb, epoch):
             loss += criterion(outputs[0], labels)
 
             for index in range(1, len(outputs)):
-                loss += loss_fn(outputs[index], teacher_output) * args['loss_coefficient']
-                loss += criterion(outputs[index], labels) * (1 - args['loss_coefficient'])
+                loss += loss_fn(outputs[index], teacher_output) * args.loss_coefficient
+                loss += criterion(outputs[index], labels) * (1 - args.loss_coefficient)
 
                 if index - 1 < len(net.adaptation_layers):
-                    loss += torch.dist(net.adaptation_layers[index-1](outputs_feature[index]), teacher_feature) * args['feature_loss_coefficient']
+                    loss += torch.dist(net.adaptation_layers[index-1](outputs_feature[index]), teacher_feature) * args.feature_loss_coefficient
             total_loss += loss.item()
 
             for classifier_index in range(len(outputs)):
@@ -233,7 +236,11 @@ def validate(net, val_loader, criterion, args, device, use_wandb, epoch):
     if accuracy[0] > best_accuracy or total_loss / len(val_loader) < best_loss:
         best_accuracy = accuracy[0]
         best_loss = total_loss / len(val_loader)
+        # Check if save_path exists, if not create it
+        if not os.path.exists(args.save_path):
+            os.makedirs(args.save_path)
         # Add more info to  model_best_epoch _ accuracy_ loss.pth: epoch count,accuracy and loss
+
         torch.save(
             net.state_dict(),
             os.path.join(args.save_path, 'model_best_epoch_%d_accuracy_%.3f_loss_%.3f.pth' % (epoch, accuracy[0], total_loss / len(val_loader))))
@@ -274,8 +281,8 @@ def test(net, test_loader, criterion, args, device, use_wandb, epoch):
 
 
 for epoch in range(1, args.epochs + 1):
-    train(model, trainloader, setup_optimizer, setup_loss, args, device, args.use_wandb, epoch, init)
-    validate(model, valloader, setup_loss, args, device, args.use_wandb, epoch)
+    train(model, trainloader, setup_optimizer, criterion, args, device, args.use_wandb, epoch, init)
+    validate(model, valloader, criterion, args, device, args.use_wandb, epoch)
     lr_scheduler.step()
     # Test per 5 epoch
     if epoch % 5 == 0:

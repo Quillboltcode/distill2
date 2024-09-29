@@ -4,10 +4,16 @@ import torch.nn.functional as F
 
 # other loss put into loss folder is better
 
-def CrossEntropy(outputs, targets, temperature):
-    log_softmax_outputs = F.log_softmax(outputs/temperature, dim=1)
-    softmax_targets = F.softmax(targets/temperature, dim=1)
-    return -(log_softmax_outputs * softmax_targets).sum(dim=1).mean()
+class CEDistill(nn.Module):
+    """Cross entropy loss between two set of outputs"""
+    def __init__(self, temperature):
+        super(CEDistill, self).__init__()
+        self.temperature = temperature
+    
+    def forward(self, outputs, targets):
+        log_softmax_outputs = F.log_softmax(outputs/self.temperature, dim=1)
+        softmax_targets = F.softmax(targets/self.temperature, dim=1)
+        return -(log_softmax_outputs * softmax_targets).sum(dim=1).mean()
 
 class DistilKL(nn.Module):
     """Distil knowlegde in neural network"""
