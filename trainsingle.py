@@ -17,7 +17,7 @@ parser.add_argument('--dataset_path', default="data", type=str, help="path to da
 parser.add_argument('--num_classes', default=7, type=int, help="number of classes",choices=[7, 100])
 parser.add_argument('--model', default="resnet18", type=str, help="resnet18 or resnet50" , choices=['resnet18', 'resnet50','resnet34','resnet101'])
 parser.add_argument('--batch_size', default=256, type=int)
-parser.add_argument('--epochs', default=120, type=int, help="number of epochs to train for (should be 120 for FER2013 and 250 for CIFAR100)")
+parser.add_argument('--epochs', default=250, type=int, help="number of epochs to train for (should be 120 for FER2013 and 250 for CIFAR100)")
 parser.add_argument('--lr', default=0.1, type=float, help="initial learning rate")
 parser.add_argument('--gpu', default=0, type=int, help="gpu id")
 parser.add_argument('--seed', default=2024, type=int, help="random seed")
@@ -95,11 +95,12 @@ def setup_dataloader():
     return trainloader, valloader, testloader
 if args.use_wandb:
     import wandb
-    wandb.init(project="FER", config=args)
+    wandb.init(project="BYOT-FER", config=args)
 # ------------------------------------------- Set Up --------------------------------------------------
 setseed(args.seed)
 device = torch.device("cuda:"+str(args.gpu) if torch.cuda.is_available() else "cpu")
 model = setup_model(args.model)
+model = model.to(device)
 setup_loss = setup_loss(args.loss)
 setup_optimizer = setup_optimizer(args.optimizer, model)
 lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(setup_optimizer, milestones=[args.epochs*1/3, args.epochs*2/3, args.epochs - 10], gamma=0.1)
