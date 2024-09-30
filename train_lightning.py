@@ -205,10 +205,10 @@ class LitModel(LightningModule):
 
         accuracy = [100 * correct[index] / total for index in range(len(correct))]
 
-        # Logging validation loss and accuracy for the last classifier (4/4)
+        # Logging validation loss and accuracy 
         self.log('val_loss', total_loss / (len(outputs)), prog_bar=True, sync_dist=True)
-        for index, acc in enumerate(accuracy):
-            self.log(f'val_accuracy_{index+1}/{len(accuracy)}', acc, prog_bar=True, sync_dist=True)
+        for index, acc in enumerate(reversed(accuracy)):
+            self.log(f'val_accuracy_{len(accuracy)-index}/{len(accuracy)}', acc, prog_bar=True, sync_dist=True)
         self.validation_step_outputs.append(torch.tensor(total_loss / (len(outputs)), device=self.device))
         return {'val_loss': total_loss}
 
@@ -301,7 +301,7 @@ if __name__ == "__main__":
     model = LitModel(args)
 
     # Trainer with early stopping
-    early_stopping_callback = EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, verbose=False, mode='min')
+    early_stopping_callback = EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0000, verbose=False, mode='min')
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     trainer = Trainer(
         max_epochs=args.epochs, 
@@ -318,5 +318,5 @@ if __name__ == "__main__":
     trainer.fit(model)
     
     # Testing
-    trainer(device=1,num_nodes=1)
+    # trainer(device=1,num_nodes=1)
     trainer.test(model)
