@@ -262,6 +262,9 @@ if __name__ == "__main__":
     parser.add_argument('--method', default="CrossEntropy", type=str, choices=['CrossEntropy', 'DistilKL', 'Loca', 'LogitCalibration'])
     parser.add_argument('--temp', default=3, type=float)
     parser.add_argument('--optimizer', default="SGD", type=str, choices=['SGD', 'AdamW'])
+    parser.add_argument('--loss_coefficient', default=0.3, type=float, help="loss coefficient")
+    parser.add_argument('--feature_loss_coefficient', default=0.03, type=float, help="feature loss coefficient")
+    parser.add_argument('--save_path', default="checkpoints", type=str, help="path to save checkpoints")
     parser.add_argument('--use_wandb', default=False, type=bool)
     args = parser.parse_args()
 
