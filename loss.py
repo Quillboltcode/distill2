@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # other loss put into loss folder is better
+# import logit_calibration
 
 class CEDistill(nn.Module):
     """Cross entropy loss between two set of outputs"""

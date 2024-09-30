@@ -1,16 +1,18 @@
-import torch
-import torchvision
-import torch.nn as nn
-import numpy as np
-import random as rd
-from tqdm import tqdm
-
 import argparse
 import os
+import random as rd
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torchvision
+from tqdm import tqdm
 
 import augment
 import loss
 import net
+import logit_calibration
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', default="fer2013", type=str, help="fer2013 or ferplus or cifar100")
 parser.add_argument('--dataset_path', default="data", type=str, help="path to dataset")
@@ -22,7 +24,7 @@ parser.add_argument('--epochs', default=250, type=int, help="number of epochs to
 parser.add_argument('--lr', default=0.1, type=float, help="initial learning rate")
 parser.add_argument('--gpu', default=0, type=int, help="gpu id")
 parser.add_argument('--seed', default=2024, type=int, help="random seed")
-parser.add_argument('--loss', default="CrossEntropy", type=str, help="loss function", choices=['CrossEntropy', 'DistilKL', 'Loca'])
+parser.add_argument('--method', default="CrossEntropy", type=str, help="loss function", choices=['CrossEntropy', 'DistilKL', 'Loca', 'LogitCalibration'])
 parser.add_argument('--temp', default=3, type=float, help="temperature for softmax distillation")
 parser.add_argument('--optimizer', default="SGD", type=str, help="optimizer", choices=['SGD', 'AdamW'])
 parser.add_argument('--loss_coeff', default=0.3, type=float, help="loss coefficient")
@@ -82,7 +84,9 @@ def setup_loss(loss_name):
     elif loss_name == "DistilKL":
         loss_fn = loss.DistilKL(args.temp)
     elif loss_name == "Loca":
-        raise NotImplementedError
+        loss_fn = logit_calibration.Loca(args.temp)
+    elif loss_name == "LogitCalibration":
+        loss_fn = logit_calibration.LogitCalibration2(args.temp)
     else:
         raise NotImplementedError
     return loss_fn
@@ -128,12 +132,12 @@ setseed(args.seed)
 device = torch.device("cuda:"+str(args.gpu) if torch.cuda.is_available() else "cpu")
 model = setup_model(args.model)
 model = model.to(device)
-setup_loss = setup_loss(args.loss)
+loss_fn = setup_loss(args.method)
 criterion = nn.CrossEntropyLoss()
 setup_optimizer = setup_optimizer(args.optimizer, model)
 lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(setup_optimizer, milestones=[args.epochs*1/3, args.epochs*2/3, args.epochs - 10], gamma=0.1)
 trainloader, valloader, testloader = setup_dataloader()
-loss_fn = setup_loss
+
 global init 
 init = False
 # ------------------------------------------- Training --------------------------------------------------
@@ -171,11 +175,17 @@ def train(net, trainloader, optimizer, criterion, args, device, use_wandb, epoch
         teacher_output = outputs[0].detach()
         teacher_feature = outputs_feature[0].detach()
 
-        
+        if args.method == "LogitCalibration":
+            calibrated_logit, teachertemp = loss_fn(outputs[0], teacher_output)
+
 
         for index in range(1, len(outputs)):
-            loss += loss_fn(outputs[index], teacher_output) * args.loss_coefficient
-            loss += criterion(outputs[index], labels) * (1 - args.loss_coefficient)
+            if args.method == "LogitCalibration":
+                loss += F.kl_div(F.log_softmax(outputs[index]/teachertemp.unsqueeze(1), dim=1), F.softmax(calibrated_logit/teachertemp.unsqueeze(1), dim=1), reduction='batchmean')*args.loss_coefficient
+                loss += criterion(outputs[index], labels) * (1 - args.loss_coefficient)
+            else :
+                loss += loss_fn(outputs[index], teacher_output) * args.loss_coefficient
+                loss += criterion(outputs[index], labels) * (1 - args.loss_coefficient)
 
             if index != 1:
                 loss += torch.dist(net.adaptation_layers[index-1](outputs_feature[index]), teacher_feature) * \
@@ -232,9 +242,17 @@ def validate(net, val_loader, criterion, args, device, use_wandb, epoch):
             loss = torch.FloatTensor([0.]).to(device)
             loss += criterion(outputs[0], labels)
 
+            if args.method == "LogitCalibration":
+                calibrated_logit, teachertemp = loss_fn(outputs[0], teacher_output)
+
             for index in range(1, len(outputs)):
-                loss += loss_fn(outputs[index], teacher_output) * args.loss_coefficient
-                loss += criterion(outputs[index], labels) * (1 - args.loss_coefficient)
+                if args.method == "LogitCalibration":
+                    loss += F.kl_div(F.log_softmax(outputs[index]/teachertemp.unsqueeze(1), dim=1), F.softmax(calibrated_logit/teachertemp.unsqueeze(1), dim=1), reduction='batchmean')*args.loss_coefficient
+                    loss += criterion(outputs[index], labels) * (1 - args.loss_coefficient)
+                else :
+                    loss += loss_fn(outputs[index], teacher_output) * args.loss_coefficient
+                    loss += criterion(outputs[index], labels) * (1 - args.loss_coefficient)
+                
 
                 if index - 1 < len(net.adaptation_layers):
                     loss += torch.dist(net.adaptation_layers[index-1](outputs_feature[index]), teacher_feature) * args.feature_loss_coefficient
