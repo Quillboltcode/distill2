@@ -139,7 +139,7 @@ class LitModel(LightningModule):
             self.correct[classifier_index] += float(self.predicted[classifier_index].eq(labels.data).cpu().sum())
         self.log('train_acc', 100 * self.correct[-1] / len(labels), on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
-    def training_epoch_end(self, outputs):
+    def on_training_epoch_end(self, outputs):
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
         self.log('avg_train_loss', avg_loss, prog_bar=True)
 
@@ -191,7 +191,7 @@ class LitModel(LightningModule):
 
         return {'val_loss': total_loss}
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self, outputs):
         # Calculate average validation loss across all batches
         avg_loss = torch.stack([torch.tensor(x['val_loss']) for x in outputs]).mean()
 
@@ -234,7 +234,7 @@ class LitModel(LightningModule):
 
         return {'test_accuracy': accuracy}
 
-    def test_epoch_end(self, outputs):
+    def on_test_epoch_end(self, outputs):
         # Compute average test accuracy over all batches
         avg_accuracy = [torch.tensor([x['test_accuracy'][i] for x in outputs]).mean() for i in range(4)]
 
