@@ -209,16 +209,19 @@ class LitModel(LightningModule):
         self.log('val_loss', total_loss / (len(outputs)), prog_bar=True)
         for index, acc in enumerate(accuracy):
             self.log(f'val_accuracy_{index+1}/{len(accuracy)}', acc, prog_bar=True)
-        self.validation_step_outputs.append(total_loss / (len(outputs)))
+        self.validation_step_outputs.append(torch.tensor(total_loss / (len(outputs)), device=self.device))
         return {'val_loss': total_loss}
 
     def on_validation_epoch_end(self):
         # Calculate average validation loss across all batches
-        avg_loss = torch.stack(self.validation_step_outputs).mean()
+            # Calculate average validation loss across all batches
+        if len(self.validation_step_outputs) > 0:
+            avg_loss = torch.stack(self.validation_step_outputs).mean()
+            self.log('avg_val_loss', avg_loss, prog_bar=True)
 
         # Log the average validation loss
         self.log('avg_val_loss', avg_loss, prog_bar=True)
-
+        self.validation_step_outputs.clear()
         # Save the model if the validation loss is lower than the best recorded loss
         if avg_loss < self.best_loss:
             self.best_loss = avg_loss.item()
