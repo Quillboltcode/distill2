@@ -308,7 +308,7 @@ if __name__ == "__main__":
         logger=wandb_logger, 
         callbacks=[early_stopping_callback], 
         accelerator='gpu',            # Use GPU accelerator
-        strategy='ddp',               # Set to DDP for multi-GPU
+        strategy='ddp_find_unused_parameters_true',               # Set to DDP for multi-GPU
         devices=torch.cuda.device_count(),  # Automatically detect the number of available GPUs
         # precision=16 if args.use_fp16 else 32  # Optionally enable mixed precision (FP16)
     )
