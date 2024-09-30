@@ -54,8 +54,9 @@ class LitModel(LightningModule):
 
     def init_adaptation_layers(self):
         # Initialize adaptation layers based on the size of outputs_feature
+        self.model = self.model.to(self.device)
         dummy_input = torch.randn(1, 3, 224, 224).to(self.device)
-        _, outputs_feature = self.model(dummy_input).to(self.device)
+        _, outputs_feature = self.model(dummy_input)
 
         layer_list = []
         teacher_feature_size = outputs_feature[0].size(1)
