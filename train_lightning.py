@@ -145,21 +145,21 @@ class LitModel(LightningModule):
                         self.args.feature_loss_coefficient
 
         # Accuracy calculation
-        self.log_accuracy(outputs, labels)
+        # self.log_accuracy(outputs, labels)
 
         # Log the training loss and accuracy
-        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         return loss
 
-    def log_accuracy(self, outputs, labels):
-        for classifier_index in range(len(outputs)):
-            _, self.predicted[classifier_index] = torch.max(outputs[classifier_index].data, 1)
-            self.correct[classifier_index] += float(self.predicted[classifier_index].eq(labels.data).cpu().sum())
-        self.log('train_acc', 100 * self.correct[-1] / len(labels), on_step=True, on_epoch=True, prog_bar=True, logger=True)
+    # def log_accuracy(self, outputs, labels):
+    #     for classifier_index in range(len(outputs)):
+    #         _, self.predicted[classifier_index] = torch.max(outputs[classifier_index].data, 1)
+    #         self.correct[classifier_index] += float(self.predicted[classifier_index].eq(labels.data).cpu().sum())
+    #     self.log('train_acc', 100 * self.correct[-1] / len(labels), on_step=True, on_epoch=True, prog_bar=True, logger=True , sync_dist=True)
 
     def on_training_epoch_end(self, outputs):
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
-        self.log('avg_train_loss', avg_loss, prog_bar=True)
+        self.log('avg_train_loss', avg_loss, prog_bar=True , sync_dist=True)
 
     def validation_step(self, batch, batch_idx):
         inputs, labels = batch
@@ -206,9 +206,9 @@ class LitModel(LightningModule):
         accuracy = [100 * correct[index] / total for index in range(len(correct))]
 
         # Logging validation loss and accuracy for the last classifier (4/4)
-        self.log('val_loss', total_loss / (len(outputs)), prog_bar=True)
+        self.log('val_loss', total_loss / (len(outputs)), prog_bar=True, sync_dist=True)
         for index, acc in enumerate(accuracy):
-            self.log(f'val_accuracy_{index+1}/{len(accuracy)}', acc, prog_bar=True)
+            self.log(f'val_accuracy_{index+1}/{len(accuracy)}', acc, prog_bar=True, sync_dist=True)
         self.validation_step_outputs.append(torch.tensor(total_loss / (len(outputs)), device=self.device))
         return {'val_loss': total_loss}
 
@@ -217,10 +217,10 @@ class LitModel(LightningModule):
             # Calculate average validation loss across all batches
         if len(self.validation_step_outputs) > 0:
             avg_loss = torch.stack(self.validation_step_outputs).mean()
-            self.log('avg_val_loss', avg_loss, prog_bar=True)
+            self.log('avg_val_loss', avg_loss, prog_bar=True, sync_dist=True)
 
         # Log the average validation loss
-        self.log('avg_val_loss', avg_loss, prog_bar=True)
+        self.log('avg_val_loss', avg_loss, prog_bar=True, sync_dist=True)
         self.validation_step_outputs.clear()
         # Save the model if the validation loss is lower than the best recorded loss
         if avg_loss < self.best_loss:
@@ -251,10 +251,10 @@ class LitModel(LightningModule):
         accuracy = [100 * correct[i] / total_samples for i in range(len(correct))]
 
         # Logging the accuracies for each classifier
-        self.log('test_acc_4/4', accuracy[0], prog_bar=True)
-        self.log('test_acc_3/4', accuracy[1], prog_bar=True)
-        self.log('test_acc_2/4', accuracy[2], prog_bar=True)
-        self.log('test_acc_1/4', accuracy[3], prog_bar=True)
+        self.log('test_acc_4/4', accuracy[0], prog_bar=True, sync_dist=True)
+        self.log('test_acc_3/4', accuracy[1], prog_bar=True, sync_dist=True)
+        self.log('test_acc_2/4', accuracy[2], prog_bar=True, sync_dist=True)
+        self.log('test_acc_1/4', accuracy[3], prog_bar=True, sync_dist=True)
         
 
     # def on_test_epoch_end(self, outputs):
