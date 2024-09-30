@@ -10,7 +10,7 @@ from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import LearningRateMonitor
 
-from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
+from pytorch_lightning.loggers import WandbLogger, CSVLogger
 
 import augment
 import loss
@@ -23,7 +23,7 @@ class LitModel(LightningModule):
         super(LitModel, self).__init__()
         self.args = args
         self.best_accuracy = 0.0
-        self.best_loss = float('inf')
+        self.best_loss = 9999
         
 
         # Setup model, loss, optimizer, and scheduler
@@ -295,7 +295,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
 
     # Logger (optional)
-    wandb_logger = WandbLogger(project="BYOT-FER") if args.use_wandb else TensorBoardLogger
+    wandb_logger = WandbLogger(project="BYOT-FER") if args.use_wandb else CSVLogger("logs")
 
     # Model setup
     model = LitModel(args)
