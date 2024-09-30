@@ -227,18 +227,16 @@ def train(net, trainloader, optimizer, criterion, args, device, use_wandb, epoch
 
 def validate(net, val_loader, criterion, args, device, use_wandb, epoch):
     # Save model with current best accuracy on validation 4/4 or lowest val loss
-    best_accuracy = 0.0
+
     best_loss = float('inf')
     total_loss = 0.0
-    correct = [0] * 5
+    correct = [0] * 4
     total = 0.0
 
     with torch.no_grad():
         for inputs, labels in tqdm(val_loader):
             inputs, labels = inputs.to(device), labels.to(device)
             outputs, outputs_feature = net(inputs)
-            ensemble = sum(outputs) / len(outputs)
-            outputs.append(ensemble)
             total += float(labels.size(0))
 
             teacher_output = outputs[0].detach()
@@ -268,9 +266,9 @@ def validate(net, val_loader, criterion, args, device, use_wandb, epoch):
                 correct[classifier_index] += float(predicted.eq(labels.data).cpu().sum())
 
     accuracy = [100 * correct[index] / total for index in range(len(correct))]
-
-    print('Validation Set Loss: %.03f | Accuracy: 4/4: %.4f%% 3/4: %.4f%% 2/4: %.4f%%  1/4: %.4f%%'
-          ' Ensemble: %.4f%%' % (total_loss / (len(val_loader)), *accuracy))
+    print('Validation Loss: %.03f | Acc: 4/4: %.2f%% 3/4: %.2f%% 2/4: %.2f%%  1/4: %.2f%%'
+          , total_loss / (len(val_loader)),
+             100 * correct[0] / total, 100 * correct[1] / total, 100 * correct[2] / total, 100 * correct[3] / total)
 
     if use_wandb:
         wandb.log({"Validation Loss": total_loss / (len(val_loader)),
@@ -278,11 +276,9 @@ def validate(net, val_loader, criterion, args, device, use_wandb, epoch):
                    "Validation Accuracy 3/4": accuracy[1],
                    "Validation Accuracy 2/4": accuracy[2],
                    "Validation Accuracy 1/4": accuracy[3],
-                   "Validation Accuracy Ensemble": accuracy[4],
                    })
 
-    if accuracy[0] > best_accuracy or total_loss / len(val_loader) < best_loss:
-        best_accuracy = accuracy[0]
+    if total_loss / len(val_loader) < best_loss:
         best_loss = total_loss / len(val_loader)
         # Check if save_path exists, if not create it
         if not os.path.exists(args.save_path):
@@ -295,29 +291,28 @@ def validate(net, val_loader, criterion, args, device, use_wandb, epoch):
 
     return total_loss/ len(val_loader)
 
-def test(net, test_loader, criterion, args, device, use_wandb, epoch):
+def evaluate(model, test_loader, device, use_wandb):
     """
     Evaluate the model on the test set.
     """
-    net.eval()
-    correct = [0] * 5
-    total = 0.0
+    model.eval()
+    total_samples = 0
+    correct = [0] * 4
     predictions = []
+
     with torch.no_grad():
-        for images, labels in tqdm(test_loader):
+        for images, labels in test_loader:
             images, labels = images.to(device), labels.to(device)
-            outputs, _ = net(images)
-            ensemble = sum(outputs) / len(outputs)
-            outputs.append(ensemble)
-            total += float(labels.size(0))
-            _, predicted = torch.max(outputs[-1].data, 1)
-            correct[-1] += float(predicted.eq(labels.data).cpu().sum())
-            predictions.extend(predicted.cpu().numpy())
+            outputs, _ = model(images)
+            total_samples += labels.size(0)
+            for i, output in enumerate(outputs):
+                _, predicted = torch.max(output.data, 1)
+                correct[i] += predicted.eq(labels.data).cpu().sum().item()
+            predictions.extend(labels.cpu().numpy())
 
-    accuracy = [100 * correct[index] / total for index in range(len(correct))]
+    accuracy = [100 * correct[i] / total_samples for i in range(len(correct))]
 
-    print('Test Set Accuracy: 4/4: %.4f%% 3/4: %.4f%% 2/4: %.4f%%  1/4: %.4f%%'
-          ' Ensemble: %.4f%%' % tuple(accuracy))
+    print(f'Test Acc: 4/4: {accuracy[0]:.2f}% 3/4: {accuracy[1]:.2f}% 2/4: {accuracy[2]:.2f}%  1/4: {accuracy[3]:.2f}%')
 
     if use_wandb:
         wandb.log({
@@ -325,7 +320,6 @@ def test(net, test_loader, criterion, args, device, use_wandb, epoch):
             "TestAcc_3/4": accuracy[1],
             "TestAcc_2/4": accuracy[2],
             "TestAcc_1/4": accuracy[3],
-            "TestAccEnsemble": accuracy[-1],
         })
 
 
@@ -334,13 +328,14 @@ for epoch in range(1, args.epochs + 1):
     val_loss = validate(model, valloader, criterion, args, device, args.use_wandb, epoch)
     lr_scheduler.step()
     # Initialize the early stopping object
-    early_stopping = EarlyStopping(patience=5, min_delta=0.001)
+    if 'early_stopping' not in locals():
+        early_stopping = EarlyStopping(patience=5, min_delta=0.001)
     if early_stopping(val_loss):
         print("Early stopping")
         # Test
-        test(model, testloader, criterion, args, device, args.use_wandb, epoch)
+        evaluate(model, testloader, criterion, args, device, args.use_wandb, epoch)
         break
     # Test per 5 epoch
     if epoch % 5 == 0:
-        test(model, testloader, setup_loss, args, device, args.use_wandb, epoch)
+        evaluate(model, testloader, setup_loss, args, device, args.use_wandb, epoch)
     
