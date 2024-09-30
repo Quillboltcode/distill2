@@ -209,7 +209,7 @@ class LitModel(LightningModule):
         self.log('val_loss', total_loss / (len(outputs)), prog_bar=True)
         for index, acc in enumerate(accuracy):
             self.log(f'val_accuracy_{index+1}/{len(accuracy)}', acc, prog_bar=True)
-        self.validation_step_outputs.append(total_loss)
+        self.validation_step_outputs.append(total_loss / (len(outputs)))
         return {'val_loss': total_loss}
 
     def on_validation_epoch_end(self):
