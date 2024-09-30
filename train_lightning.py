@@ -30,7 +30,9 @@ class LitModel(LightningModule):
         self.model = self.setup_model(args.model)
         self.loss_fn = self.setup_loss(args.method)
         self.criterion = nn.CrossEntropyLoss()
+
         self.save_hyperparameters(args)
+        self.adaptation_layers_initialized = False
 
     def setup_model(self, model_name):
         if model_name == "resnet18":
@@ -44,6 +46,24 @@ class LitModel(LightningModule):
         else:
             raise NotImplementedError
         return model
+
+    def setup(self, stage=None):
+        # Initialize adaptation layers during setup, before training or validation
+        if not self.adaptation_layers_initialized:
+            self.init_adaptation_layers()
+
+    def init_adaptation_layers(self):
+        # Initialize adaptation layers based on the size of outputs_feature
+        dummy_input = torch.randn(1, 3, 224, 224).to(self.device)
+        _, outputs_feature = self.model(dummy_input)
+
+        layer_list = []
+        teacher_feature_size = outputs_feature[0].size(1)
+        for index in range(1, len(outputs_feature)):
+            student_feature_size = outputs_feature[index].size(1)
+            layer_list.append(nn.Linear(student_feature_size, teacher_feature_size))
+        self.model.adaptation_layers = nn.ModuleList(layer_list).to(self.device)
+        self.adaptation_layers_initialized = True
 
     def setup_loss(self, loss_name):
         if loss_name == "CrossEntropy":
@@ -92,14 +112,8 @@ class LitModel(LightningModule):
         outputs, outputs_feature = self.model(inputs)
 
         # Initialize adaptation layers if not done
-        if not self.init:
-            layer_list = []
-            teacher_feature_size = outputs_feature[0].size(1)
-            for index in range(1, len(outputs_feature)):
-                student_feature_size = outputs_feature[index].size(1)
-                layer_list.append(nn.Linear(student_feature_size, teacher_feature_size))
-            self.model.adaptation_layers = nn.ModuleList(layer_list)
-            self.init = True
+        if not self.adaptation_layers_initialized:
+            self.init_adaptation_layers()
 
         # Loss calculation
         loss = torch.FloatTensor([0.]).to(self.device)
@@ -146,6 +160,9 @@ class LitModel(LightningModule):
     def validation_step(self, batch, batch_idx):
         inputs, labels = batch
         outputs, outputs_feature = self.model(inputs)
+
+        if not self.adaptation_layers_initialized:
+            self.init_adaptation_layers()
         total_loss = 0.0
         correct = [0] * 4
         total = float(labels.size(0))
