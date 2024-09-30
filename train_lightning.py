@@ -214,7 +214,7 @@ class LitModel(LightningModule):
 
     def on_validation_epoch_end(self):
         # Calculate average validation loss across all batches
-        avg_loss = torch.stack([torch.tensor(x['val_loss']) for x in self.validation_step_outputs]).mean()
+        avg_loss = torch.stack(self.validation_step_outputs).mean()
 
         # Log the average validation loss
         self.log('avg_val_loss', avg_loss, prog_bar=True)
