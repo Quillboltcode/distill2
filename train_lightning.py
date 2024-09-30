@@ -91,8 +91,9 @@ class LitModel(LightningModule):
 
         scheduler = torch.optim.lr_scheduler.MultiStepLR(
             optimizer, 
-            milestones=[self.args.epochs * 1/3, self.args.epochs * 2/3, self.args.epochs - 10], 
-            gamma=0.1
+            milestones=[80,160,240], 
+            gamma=0.1,
+            verbose=True
         )
         return [optimizer], [scheduler]
 
@@ -127,12 +128,21 @@ class LitModel(LightningModule):
 
         if self.args.method == "LogitCalibration":
             calibrated_logit, teachertemp = self.loss_fn(teacher_output, labels)
+        elif self.args.method == "Loca":
+            calibrated_logit = self.loss_fn(teacher_output, labels)
 
         for index in range(1, len(outputs)):
             if self.args.method == "LogitCalibration":
                 loss += F.kl_div(
                     F.log_softmax(outputs[index] / teachertemp.unsqueeze(1), dim=1),
                     F.softmax(calibrated_logit / teachertemp.unsqueeze(1), dim=1),
+                    reduction='batchmean'
+                ) * self.args.loss_coefficient
+                loss += self.criterion(outputs[index], labels) * (1 - self.args.loss_coefficient)
+            elif self.args.method == "Loca":
+                loss += F.kl_div(
+                    F.log_softmax(outputs[index] , dim=1),
+                    F.softmax(calibrated_logit , dim=1),
                     reduction='batchmean'
                 ) * self.args.loss_coefficient
                 loss += self.criterion(outputs[index], labels) * (1 - self.args.loss_coefficient)
@@ -179,6 +189,8 @@ class LitModel(LightningModule):
 
         if self.args.method == "LogitCalibration":
             calibrated_logit, teachertemp = self.loss_fn(teacher_output, labels)
+        elif self.args.method == "Loca":
+            calibrated_logit = self.loss_fn(teacher_output, labels)
 
         for index in range(1, len(outputs)):
             if self.args.method == "LogitCalibration":
@@ -301,12 +313,14 @@ if __name__ == "__main__":
     model = LitModel(args)
 
     # Trainer with early stopping
-    early_stopping_callback = EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0000, verbose=False, mode='min')
+    # early_stopping_callback = EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0000, verbose=True, mode='min')
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     trainer = Trainer(
         max_epochs=args.epochs, 
         logger=wandb_logger, 
-        callbacks=[early_stopping_callback,lr_monitor], 
+        callbacks=[
+            # early_stopping_callback,
+            lr_monitor], 
         accelerator='gpu',            # Use GPU accelerator
         strategy='ddp_find_unused_parameters_true',               # Set to DDP for multi-GPU
         devices=torch.cuda.device_count(),  # Automatically detect the number of available GPUs
