@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 from tqdm import tqdm
+import pprint
 
 import augment
 import loss
@@ -128,6 +129,10 @@ if args.use_wandb:
     import wandb
     wandb.init(project="BYOT-FER", config=args)
 # ------------------------------------------- Set Up --------------------------------------------------
+
+
+pp = pprint.PrettyPrinter(indent=4)
+pp.pprint(vars(args))
 setseed(args.seed)
 device = torch.device("cuda:"+str(args.gpu) if torch.cuda.is_available() else "cpu")
 model = setup_model(args.model)
@@ -176,7 +181,7 @@ def train(net, trainloader, optimizer, criterion, args, device, use_wandb, epoch
         teacher_feature = outputs_feature[0].detach()
 
         if args.method == "LogitCalibration":
-            calibrated_logit, teachertemp = loss_fn(outputs[0], teacher_output)
+            calibrated_logit, teachertemp = loss_fn(teacher_output, labels)
 
 
         for index in range(1, len(outputs)):
@@ -243,7 +248,7 @@ def validate(net, val_loader, criterion, args, device, use_wandb, epoch):
             loss += criterion(outputs[0], labels)
 
             if args.method == "LogitCalibration":
-                calibrated_logit, teachertemp = loss_fn(outputs[0], teacher_output)
+                calibrated_logit, teachertemp = loss_fn(teacher_output, labels)
 
             for index in range(1, len(outputs)):
                 if args.method == "LogitCalibration":
