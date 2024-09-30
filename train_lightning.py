@@ -10,7 +10,7 @@ from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import LearningRateMonitor
 
-from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 
 import augment
 import loss
@@ -98,7 +98,7 @@ class LitModel(LightningModule):
 
     def train_dataloader(self):
         trainset = torchvision.datasets.ImageFolder(self.args.dataset_path+"/train", transform=augment.data_transforms_FER['train'])
-        return DataLoader(trainset, batch_size=self.args.batch_size, shuffle=True, num_workers=self.args.num_workers)
+        return DataLoader(trainset, batch_size=self.args.batch_size, shuffle=False, num_workers=self.args.num_workers)
 
     def val_dataloader(self):
         valset = torchvision.datasets.ImageFolder(self.args.dataset_path+"/val", transform=augment.data_transforms_FER['val'])
@@ -295,21 +295,22 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
 
     # Logger (optional)
-    wandb_logger = WandbLogger(project="BYOT-FER") if args.use_wandb else None
+    wandb_logger = WandbLogger(project="BYOT-FER") if args.use_wandb else TensorBoardLogger
 
     # Model setup
     model = LitModel(args)
 
     # Trainer with early stopping
-    early_stopping_callback = EarlyStopping(monitor='val_loss', patience=5)
+    early_stopping_callback = EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, verbose=False, mode='min')
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     trainer = Trainer(
         max_epochs=args.epochs, 
         logger=wandb_logger, 
-        callbacks=[early_stopping_callback], 
+        callbacks=[early_stopping_callback,lr_monitor], 
         accelerator='gpu',            # Use GPU accelerator
         strategy='ddp_find_unused_parameters_true',               # Set to DDP for multi-GPU
         devices=torch.cuda.device_count(),  # Automatically detect the number of available GPUs
+        
         # precision=16 if args.use_fp16 else 32  # Optionally enable mixed precision (FP16)
     )
     
@@ -317,4 +318,5 @@ if __name__ == "__main__":
     trainer.fit(model)
     
     # Testing
+    trainer(device=1,num_nodes=1)
     trainer.test(model)
