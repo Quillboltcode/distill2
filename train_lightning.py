@@ -33,6 +33,9 @@ class LitModel(LightningModule):
 
         self.save_hyperparameters(args)
         self.adaptation_layers_initialized = False
+        # https://github.com/Lightning-AI/pytorch-lightning/discussions/17182
+        self.validation_step_outputs = []
+        # self.test_step_outputs = []
 
     def setup_model(self, model_name):
         if model_name == "resnet18":
@@ -206,12 +209,12 @@ class LitModel(LightningModule):
         self.log('val_loss', total_loss / (len(outputs)), prog_bar=True)
         for index, acc in enumerate(accuracy):
             self.log(f'val_accuracy_{index+1}/{len(accuracy)}', acc, prog_bar=True)
-
+        self.validation_step_outputs.append(loss)
         return {'val_loss': total_loss}
 
-    def on_validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         # Calculate average validation loss across all batches
-        avg_loss = torch.stack([torch.tensor(x['val_loss']) for x in outputs]).mean()
+        avg_loss = torch.stack([torch.tensor(x['val_loss']) for x in self.validation_step_outputs]).mean()
 
         # Log the average validation loss
         self.log('avg_val_loss', avg_loss, prog_bar=True)
@@ -249,18 +252,17 @@ class LitModel(LightningModule):
         self.log('test_acc_3/4', accuracy[1], prog_bar=True)
         self.log('test_acc_2/4', accuracy[2], prog_bar=True)
         self.log('test_acc_1/4', accuracy[3], prog_bar=True)
+        
 
-        return {'test_accuracy': accuracy}
+    # def on_test_epoch_end(self, outputs):
+    #     # Compute average test accuracy over all batches
+    #     avg_accuracy = [torch.tensor([x['test_accuracy'][i] for x in outputs]).mean() for i in range(4)]
 
-    def on_test_epoch_end(self, outputs):
-        # Compute average test accuracy over all batches
-        avg_accuracy = [torch.tensor([x['test_accuracy'][i] for x in outputs]).mean() for i in range(4)]
-
-        # Logging overall test results
-        self.log('avg_test_acc_4/4', avg_accuracy[0], prog_bar=True)
-        self.log('avg_test_acc_3/4', avg_accuracy[1], prog_bar=True)
-        self.log('avg_test_acc_2/4', avg_accuracy[2], prog_bar=True)
-        self.log('avg_test_acc_1/4', avg_accuracy[3], prog_bar=True)
+    #     # Logging overall test results
+    #     self.log('avg_test_acc_4/4', avg_accuracy[0], prog_bar=True)
+    #     self.log('avg_test_acc_3/4', avg_accuracy[1], prog_bar=True)
+    #     self.log('avg_test_acc_2/4', avg_accuracy[2], prog_bar=True)
+    #     self.log('avg_test_acc_1/4', avg_accuracy[3], prog_bar=True)
 
 
 
