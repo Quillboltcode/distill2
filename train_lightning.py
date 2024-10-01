@@ -24,7 +24,7 @@ class ResNetAdaptation(nn.Module):
         self.num_classes = num_classes
         self.model = self.setup_model(model_name)
         self.adaptation_layers = None
-        self.adaptation_layers_initialized = False
+        self.init_adaptation_layers()
 
     def setup_model(self, model_name):
         if model_name == "resnet18":
@@ -50,10 +50,7 @@ class ResNetAdaptation(nn.Module):
                 layer_list.append(nn.Linear(student_feature_size, teacher_feature_size))
             self.adaptation_layers = nn.ModuleList(layer_list).to("cuda")
             self.adaptation_layers_initialized = True
-
     def forward(self, x):
-        if not self.adaptation_layers_initialized:
-            self.init_adaptation_layers()
         return self.model(x) 
 
 
@@ -362,7 +359,7 @@ if __name__ == "__main__":
     # Training
     trainer.fit(model)
     # Load best model
-    model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path)
+    model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path,)
     # checkpoint = torch.load(ckpt_callback.best_model_path, map_location=lambda storage, loc: storage)
     # state_dict = checkpoint['state_dict']
 
