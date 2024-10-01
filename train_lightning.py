@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from pytorch_lightning.callbacks import LearningRateMonitor
+from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
 from pytorch_lightning.loggers import WandbLogger, CSVLogger
 
@@ -236,20 +236,7 @@ class LitModel(LightningModule):
         # Log the average validation loss
         self.log('avg_val_loss', avg_loss, prog_bar=True, sync_dist=True)
         self.validation_step_outputs.clear()
-        # Save the model if the validation loss is lower than the best recorded loss
-        if avg_loss < self.best_loss:
-            self.best_loss = avg_loss.item()
 
-            save_path = self.args.save_path
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-
-            torch.save(
-                self.model.state_dict(),
-                os.path.join(save_path, 'model_best_epoch_%d_loss_%.3f.pth' % (
-                    self.current_epoch, avg_loss.item()
-                ))
-            )
 
     def test_step(self, batch, batch_idx):
         images, labels = batch
@@ -316,12 +303,20 @@ if __name__ == "__main__":
 
     # Trainer with early stopping
     # early_stopping_callback = EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0000, verbose=True, mode='min')
+    # check if dir exists
+    if not os.path.exists(args.save_path):
+        os.makedirs(args.save_path)
+
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
+    ckpt_callback = ModelCheckpoint(monitor='val_loss', 
+                                    dirpath=args.save_path,
+                                    filename='model_best_epoch_{epoch}_{val_loss:.3f}', mode='min', save_top_k=1)
     trainer = Trainer(
         max_epochs=args.epochs, 
         logger=wandb_logger, 
         callbacks=[
             # early_stopping_callback,
+            ckpt_callback,
             lr_monitor], 
         accelerator='gpu',            # Use GPU accelerator
         strategy='ddp_find_unused_parameters_true',               # Set to DDP for multi-GPU
@@ -332,36 +327,8 @@ if __name__ == "__main__":
     
     # Training
     trainer.fit(model)
-    
-    import gc
-    import glob
-    # collect garbage after training
-    gc.collect()
-    checkpoint_dir = args.save_path 
-    # Search for all checkpoints with the format 'model_best_epoch_%d_loss_%.3f.pth'
-    checkpoint_paths = glob.glob(os.path.join(checkpoint_dir, 'model_best_epoch_*.pth'))
-    
-    if len(checkpoint_paths) == 0:
-        raise ValueError(f"No checkpoints found in {checkpoint_dir}")
-    
-    # Sort by modification time (most recent first)
-    checkpoint_paths = sorted(checkpoint_paths, key=os.path.getmtime, reverse=True)
-
-    # Select the most recent checkpoint
-    most_recent_checkpoint = checkpoint_paths[0]  # Top 1 (most recent)
-    
-    print(f"Loading most recent checkpoint: {most_recent_checkpoint}")
-
-    model.load_from_checkpoint(most_recent_checkpoint)
-
-     # Update this to your actual checkpoint directory
-
-    # Create a PyTorch Lightning Trainer for testing
-    test_trainer = Trainer(
-        gpus=1,  # Run on a single GPU
-        logger=wandb_logger,  # Disable logger if not needed
-    )
-
-    # Test the model using the test dataset
-    test_trainer.test(model)
+    # Load best model
+    model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path)
+    # Test
+    trainer.test(model)
         
