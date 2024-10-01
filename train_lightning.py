@@ -18,21 +18,35 @@ import loss
 import net
 import logit_calibration
 
+
+
+
 class LitModel(LightningModule):
-    def __init__(self, args):
+    def __init__(self, model_name="resnet18", 
+                 method="CrossEntropy",
+                 dataset="fer2013",
+                 dataset_path="data", 
+                 lr=0.1, 
+                 optimizer="SGD", batch_size=256,
+                 num_workers=4,
+                 temp=3, loss_coefficient=0.3,
+                 feature_loss_coefficient=0.03,
+                 save_path="checkpoints",
+                 
+                 num_classes=7):
 
         super(LitModel, self).__init__()
-        self.args = args
+        # self.args = args
         self.best_accuracy = 0.0
         self.best_loss = 9999
         
 
         # Setup model, loss, optimizer, and scheduler
-        self.model = self.setup_model(args.model)
-        self.loss_fn = self.setup_loss(args.method)
+        self.model = self.setup_model(model_name)
+        self.loss_fn = self.setup_loss(method)
         self.criterion = nn.CrossEntropyLoss()
 
-        self.save_hyperparameters(args)
+        self.save_hyperparameters()
         self.adaptation_layers_initialized = False
         # https://github.com/Lightning-AI/pytorch-lightning/discussions/17182
         self.validation_step_outputs = []
@@ -40,13 +54,13 @@ class LitModel(LightningModule):
 
     def setup_model(self, model_name):
         if model_name == "resnet18":
-            model = net.resnet18(num_classes=self.args.num_classes)
+            model = net.resnet18(num_classes=self.hparams.num_classes)
         elif model_name == "resnet34":
-            model = net.resnet34(num_classes=self.args.num_classes)
+            model = net.resnet34(num_classes=self.hparams.num_classes)
         elif model_name == "resnet50":
-            model = net.resnet50(num_classes=self.args.num_classes)
+            model = net.resnet50(num_classes=self.hparams.num_classes)
         elif model_name == "resnet101":
-            model = net.resnet101(num_classes=self.args.num_classes)
+            model = net.resnet101(num_classes=self.hparams.num_classes)
         else:
             raise NotImplementedError
         return model
@@ -72,21 +86,21 @@ class LitModel(LightningModule):
 
     def setup_loss(self, loss_name):
         if loss_name == "CrossEntropy":
-            return loss.CEDistill(self.args.temp)
+            return loss.CEDistill(self.hparams.temp)
         elif loss_name == "DistilKL":
-            return loss.DistilKL(self.args.temp)
+            return loss.DistilKL(self.hparams.temp)
         elif loss_name == "Loca":
-            return logit_calibration.Loca(self.args.temp)
+            return logit_calibration.Loca(self.hparams.temp)
         elif loss_name == "LogitCalibration":
-            return logit_calibration.LogitCalibration2(self.args.temp)
+            return logit_calibration.LogitCalibration2(self.hparams.temp)
         else:
             raise NotImplementedError
 
     def configure_optimizers(self):
-        if self.args.optimizer == "SGD":
-            optimizer = torch.optim.SGD(self.parameters(), lr=self.args.lr, momentum=0.9, weight_decay=5e-4)
-        elif self.args.optimizer == "AdamW":
-            optimizer = torch.optim.AdamW(self.parameters(), lr=self.args.lr, weight_decay=5e-4)
+        if self.hparams.optimizer == "SGD":
+            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams.lr, momentum=0.9, weight_decay=5e-4)
+        elif self.hparams.optimizer == "AdamW":
+            optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=5e-4)
         else:
             raise NotImplementedError
 
@@ -99,16 +113,16 @@ class LitModel(LightningModule):
         return [optimizer], [scheduler]
 
     def train_dataloader(self):
-        trainset = torchvision.datasets.ImageFolder(self.args.dataset_path+"/train", transform=augment.data_transforms_FER['train'])
-        return DataLoader(trainset, batch_size=self.args.batch_size, shuffle=False, num_workers=self.args.num_workers)
+        trainset = torchvision.datasets.ImageFolder(self.hparams.dataset_path+"/train", transform=augment.data_transforms_FER['train'])
+        return DataLoader(trainset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=self.hparams.num_workers)
 
     def val_dataloader(self):
-        valset = torchvision.datasets.ImageFolder(self.args.dataset_path+"/val", transform=augment.data_transforms_FER['val'])
-        return DataLoader(valset, batch_size=self.args.batch_size, num_workers=self.args.num_workers)
+        valset = torchvision.datasets.ImageFolder(self.hparams.dataset_path+"/val", transform=augment.data_transforms_FER['val'])
+        return DataLoader(valset, batch_size=self.hparams.batch_size, num_workers=self.hparams.num_workers)
 
     def test_dataloader(self):
-        testset = torchvision.datasets.ImageFolder(self.args.dataset_path+"/test", transform=augment.data_transforms_FER['test'])
-        return DataLoader(testset, batch_size=self.args.batch_size, num_workers=self.args.num_workers)
+        testset = torchvision.datasets.ImageFolder(self.hparams.dataset_path+"/test", transform=augment.data_transforms_FER['test'])
+        return DataLoader(testset, batch_size=self.hparams.batch_size, num_workers=self.hparams.num_workers)
 
     def forward(self, x):
         return self.model(x)
@@ -127,33 +141,33 @@ class LitModel(LightningModule):
         teacher_output = outputs[0].detach()
         teacher_feature = outputs_feature[0].detach()
 
-        if self.args.method == "LogitCalibration":
+        if self.hparams.method == "LogitCalibration":
             calibrated_logit, teachertemp = self.loss_fn(teacher_output, labels)
-        elif self.args.method == "Loca":
+        elif self.hparams.method == "Loca":
             calibrated_logit = self.loss_fn(teacher_output, labels)
 
         for index in range(1, len(outputs)):
-            if self.args.method == "LogitCalibration":
+            if self.hparams.method == "LogitCalibration":
                 loss += F.kl_div(
                     F.log_softmax(outputs[index] / teachertemp.unsqueeze(1), dim=1),
                     F.softmax(calibrated_logit / teachertemp.unsqueeze(1), dim=1),
                     reduction='batchmean'
-                ) * self.args.loss_coefficient
-                loss += self.criterion(outputs[index], labels) * (1 - self.args.loss_coefficient)
-            elif self.args.method == "Loca":
+                ) * self.hparams.loss_coefficient
+                loss += self.criterion(outputs[index], labels) * (1 - self.hparams.loss_coefficient)
+            elif self.hparams.method == "Loca":
                 loss += F.kl_div(
                     F.log_softmax(outputs[index] , dim=1),
                     F.softmax(calibrated_logit , dim=1),
                     reduction='batchmean'
-                ) * self.args.loss_coefficient
-                loss += self.criterion(outputs[index], labels) * (1 - self.args.loss_coefficient)
+                ) * self.hparams.loss_coefficient
+                loss += self.criterion(outputs[index], labels) * (1 - self.hparams.loss_coefficient)
             else:
-                loss += self.loss_fn(outputs[index], teacher_output) * self.args.loss_coefficient
-                loss += self.criterion(outputs[index], labels) * (1 - self.args.loss_coefficient)
+                loss += self.loss_fn(outputs[index], teacher_output) * self.hparams.loss_coefficient
+                loss += self.criterion(outputs[index], labels) * (1 - self.hparams.loss_coefficient)
 
             if index != 1:
                 loss += torch.dist(self.model.adaptation_layers[index - 1](outputs_feature[index]), teacher_feature) * \
-                        self.args.feature_loss_coefficient
+                        self.hparams.feature_loss_coefficient
 
         # Accuracy calculation
         # self.log_accuracy(outputs, labels)
@@ -188,26 +202,26 @@ class LitModel(LightningModule):
         loss = torch.FloatTensor([0.]).to(self.device)
         loss += self.criterion(outputs[0], labels)
 
-        if self.args.method == "LogitCalibration":
+        if self.hparams.method == "LogitCalibration":
             calibrated_logit, teachertemp = self.loss_fn(teacher_output, labels)
-        elif self.args.method == "Loca":
+        elif self.hparams.method == "Loca":
             calibrated_logit = self.loss_fn(teacher_output, labels)
 
         for index in range(1, len(outputs)):
-            if self.args.method == "LogitCalibration":
+            if self.hparams.method == "LogitCalibration":
                 loss += F.kl_div(
                     F.log_softmax(outputs[index] / teachertemp.unsqueeze(1), dim=1),
                     F.softmax(calibrated_logit / teachertemp.unsqueeze(1), dim=1),
                     reduction='batchmean'
-                ) * self.args.loss_coefficient
-                loss += self.criterion(outputs[index], labels) * (1 - self.args.loss_coefficient)
+                ) * self.hparams.loss_coefficient
+                loss += self.criterion(outputs[index], labels) * (1 - self.hparams.loss_coefficient)
             else:
-                loss += self.loss_fn(outputs[index], teacher_output) * self.args.loss_coefficient
-                loss += self.criterion(outputs[index], labels) * (1 - self.args.loss_coefficient)
+                loss += self.loss_fn(outputs[index], teacher_output) * self.hparams.loss_coefficient
+                loss += self.criterion(outputs[index], labels) * (1 - self.hparams.loss_coefficient)
 
             if index - 1 < len(self.model.adaptation_layers):
                 loss += torch.dist(self.model.adaptation_layers[index - 1](outputs_feature[index]), teacher_feature) * \
-                        self.args.feature_loss_coefficient
+                        self.hparams.feature_loss_coefficient
 
         total_loss += loss.item()
 
@@ -258,15 +272,7 @@ class LitModel(LightningModule):
         self.log('test_acc_1/4', accuracy[3], prog_bar=True, sync_dist=True)
         
 
-    # def on_test_epoch_end(self, outputs):
-    #     # Compute average test accuracy over all batches
-    #     avg_accuracy = [torch.tensor([x['test_accuracy'][i] for x in outputs]).mean() for i in range(4)]
 
-    #     # Logging overall test results
-    #     self.log('avg_test_acc_4/4', avg_accuracy[0], prog_bar=True)
-    #     self.log('avg_test_acc_3/4', avg_accuracy[1], prog_bar=True)
-    #     self.log('avg_test_acc_2/4', avg_accuracy[2], prog_bar=True)
-    #     self.log('avg_test_acc_1/4', avg_accuracy[3], prog_bar=True)
 
 
 
@@ -299,7 +305,19 @@ if __name__ == "__main__":
     wandb_logger = WandbLogger(project="BYOT-FER") if args.use_wandb else CSVLogger("logs")
 
     # Model setup
-    model = LitModel(args)
+    model = LitModel(
+        model_name=args.model,
+        method=args.method,
+        dataset=args.dataset,
+        dataset_path=args.dataset_path,
+        lr=args.lr, batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        temp=args.temp,
+        loss_coefficient=args.loss_coefficient,
+        feature_loss_coefficient=args.feature_loss_coefficient,
+        save_path=args.save_path,
+        num_classes=args.num_classes
+    )
 
     # Trainer with early stopping
     # early_stopping_callback = EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0000, verbose=True, mode='min')
@@ -325,11 +343,11 @@ if __name__ == "__main__":
     # Training
     trainer.fit(model)
     # Load best model
-    # model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path)
-    checkpoint = torch.load(ckpt_callback.best_model_path, map_location=lambda storage, loc: storage)
-    state_dict = checkpoint['state_dict']
+    model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path)
+    # checkpoint = torch.load(ckpt_callback.best_model_path, map_location=lambda storage, loc: storage)
+    # state_dict = checkpoint['state_dict']
 
-    model.load_state_dict(state_dict,strict=False)
+    # model.load_state_dict(state_dict,strict=False)
     # model.load_state_dict(checkpoint['state_dict'])
     model.eval()
     
