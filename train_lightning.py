@@ -366,5 +366,5 @@ if __name__ == "__main__":
     # model.load_state_dict(state_dict,strict=False)
     # model.load_state_dict(checkpoint['state_dict'])
     model.eval()
-    print(model)
-    # Trainer.test(model)
+    # print(model)
+    trainer.test(model)
