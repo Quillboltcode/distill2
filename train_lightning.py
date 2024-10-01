@@ -328,9 +328,8 @@ if __name__ == "__main__":
     # model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path)
     checkpoint = torch.load(ckpt_callback.best_model_path, map_location=lambda storage, loc: storage)
     state_dict = checkpoint['state_dict']
-    expected_keys = [k for k in state_dict.keys() if k.startswith('model.') and not k.startswith('model.adaptation_layers')]
-    new_state_dict = {k: state_dict[k] for k in expected_keys}
-    model.load_state_dict(new_state_dict)
+
+    model.load_state_dict(state_dict,strict=False)
     # model.load_state_dict(checkpoint['state_dict'])
     model.eval()
     
