@@ -41,7 +41,7 @@ class ResNetAdaptation(nn.Module):
 
     def init_adaptation_layers(self):
         if not self.adaptation_layers_initialized:
-            dummy_input = torch.randn(1, 3, 224, 224)
+            dummy_input = torch.randn(1, 3, 224, 224).to("cuda")
             _, outputs_feature = self.model(dummy_input)
             layer_list = []
             teacher_feature_size = outputs_feature[0].size(1)
