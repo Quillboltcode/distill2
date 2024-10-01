@@ -40,16 +40,14 @@ class ResNetAdaptation(nn.Module):
         return model
 
     def init_adaptation_layers(self):
-        if not self.adaptation_layers_initialized:
-            dummy_input = torch.randn(1, 3, 224, 224).to("cuda")
-            _, outputs_feature = self.model(dummy_input)
-            layer_list = []
-            teacher_feature_size = outputs_feature[0].size(1)
-            for index in range(1, len(outputs_feature)):
-                student_feature_size = outputs_feature[index].size(1)
-                layer_list.append(nn.Linear(student_feature_size, teacher_feature_size))
-            self.adaptation_layers = nn.ModuleList(layer_list).to("cuda")
-            self.adaptation_layers_initialized = True
+        dummy_input = torch.randn(1, 3, 224, 224)
+        _, outputs_feature = self.model(dummy_input)
+        layer_list = []
+        teacher_feature_size = outputs_feature[0].size(1)
+        for index in range(1, len(outputs_feature)):
+            student_feature_size = outputs_feature[index].size(1)
+            layer_list.append(nn.Linear(student_feature_size, teacher_feature_size))
+        self.adaptation_layers = nn.ModuleList(layer_list)
     def forward(self, x):
         return self.model(x) 
 
@@ -92,7 +90,7 @@ class LitModel(LightningModule):
         self.criterion = nn.CrossEntropyLoss()
 
         self.save_hyperparameters()
-        self.adaptation_layers_initialized = False
+        
         # https://github.com/Lightning-AI/pytorch-lightning/discussions/17182
         self.validation_step_outputs = []
         # self.test_step_outputs = []
@@ -359,7 +357,7 @@ if __name__ == "__main__":
     # Training
     trainer.fit(model)
     # Load best model
-    model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path,)
+    model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path)
     # checkpoint = torch.load(ckpt_callback.best_model_path, map_location=lambda storage, loc: storage)
     # state_dict = checkpoint['state_dict']
 
