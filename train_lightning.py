@@ -320,15 +320,18 @@ if __name__ == "__main__":
             lr_monitor], 
         accelerator='gpu',            # Use GPU accelerator
         strategy='ddp_find_unused_parameters_true',               # Set to DDP for multi-GPU
-        devices=torch.cuda.device_count(),  # Automatically detect the number of available GPUs
-        
-        # precision=16 if args.use_fp16 else 32  # Optionally enable mixed precision (FP16)
+        devices=torch.cuda.device_count(),  # Automatically detect the number of available GPUs)
     )
-    
     # Training
     trainer.fit(model)
     # Load best model
-    model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path)
-    # Test
-    trainer.test(model)
-        
+    # model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path)
+    checkpoint = torch.load(ckpt_callback.best_model_path, map_location=lambda storage, loc: storage)
+    state_dict = checkpoint['state_dict']
+    expected_keys = [k for k in state_dict.keys() if k.startswith('model.') and not k.startswith('model.adaptation_layers')]
+    new_state_dict = {k: state_dict[k] for k in expected_keys}
+    model.load_state_dict(new_state_dict)
+    # model.load_state_dict(checkpoint['state_dict'])
+    model.eval()
+    
+    Trainer.test(model)
