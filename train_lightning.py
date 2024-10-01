@@ -19,7 +19,7 @@ import net
 import logit_calibration
 
 class ResNetAdaptation(nn.Module):
-    def __init__(self, model_name, num_classes):
+    def __init__(self, model_name, num_classes ):
         super().__init__()
         self.num_classes = num_classes
         self.model = self.setup_model(model_name)
@@ -48,7 +48,7 @@ class ResNetAdaptation(nn.Module):
             for index in range(1, len(outputs_feature)):
                 student_feature_size = outputs_feature[index].size(1)
                 layer_list.append(nn.Linear(student_feature_size, teacher_feature_size))
-            self.adaptation_layers = nn.ModuleList(layer_list)
+            self.adaptation_layers = nn.ModuleList(layer_list).to("cuda")
             self.adaptation_layers_initialized = True
 
     def forward(self, x):
