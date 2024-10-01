@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 from torch.utils.data import DataLoader
+import pytorch_lightning as pl
 from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import LearningRateMonitor
@@ -219,7 +220,8 @@ class LitModel(LightningModule):
 
         # Logging validation loss and accuracy 
         self.log('val_loss', total_loss / (len(outputs)), prog_bar=True, sync_dist=True)
-        for index, acc in enumerate(reversed(accuracy)):
+        
+        for index, acc in enumerate(accuracy):
             self.log(f'val_accuracy_{len(accuracy)-index}/{len(accuracy)}', acc, prog_bar=True, sync_dist=True)
         self.validation_step_outputs.append(torch.tensor(total_loss / (len(outputs)), device=self.device))
         return {'val_loss': total_loss}
@@ -304,7 +306,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Seed for reproducibility
-    torch.manual_seed(args.seed)
+    pl.seed_everything(args.seed)
 
     # Logger (optional)
     wandb_logger = WandbLogger(project="BYOT-FER") if args.use_wandb else CSVLogger("logs")
@@ -331,6 +333,35 @@ if __name__ == "__main__":
     # Training
     trainer.fit(model)
     
-    # Testing
-    # trainer(device=1,num_nodes=1)
-    trainer.test(model)
+    import gc
+    import glob
+    # collect garbage after training
+    gc.collect()
+    checkpoint_dir = args.save_path 
+    # Search for all checkpoints with the format 'model_best_epoch_%d_loss_%.3f.pth'
+    checkpoint_paths = glob.glob(os.path.join(checkpoint_dir, 'model_best_epoch_*.pth'))
+    
+    if len(checkpoint_paths) == 0:
+        raise ValueError(f"No checkpoints found in {checkpoint_dir}")
+    
+    # Sort by modification time (most recent first)
+    checkpoint_paths = sorted(checkpoint_paths, key=os.path.getmtime, reverse=True)
+
+    # Select the most recent checkpoint
+    most_recent_checkpoint = checkpoint_paths[0]  # Top 1 (most recent)
+    
+    print(f"Loading most recent checkpoint: {most_recent_checkpoint}")
+
+    model.load_from_checkpoint(most_recent_checkpoint)
+
+     # Update this to your actual checkpoint directory
+
+    # Create a PyTorch Lightning Trainer for testing
+    test_trainer = Trainer(
+        gpus=1,  # Run on a single GPU
+        logger=wandb_logger,  # Disable logger if not needed
+    )
+
+    # Test the model using the test dataset
+    test_trainer.test(model)
+        
