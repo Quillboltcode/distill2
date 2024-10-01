@@ -120,7 +120,7 @@ class LitModel(LightningModule):
             optimizer, 
             milestones=[80,160,240], 
             gamma=0.1,
-            verbose=True
+            verbose=False
         )
         return [optimizer], [scheduler]
 
@@ -355,7 +355,7 @@ if __name__ == "__main__":
     # Training
     trainer.fit(model)
     # Load best model
-    model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path)
+    model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path,strict=False)
     # checkpoint = torch.load(ckpt_callback.best_model_path, map_location=lambda storage, loc: storage)
     # state_dict = checkpoint['state_dict']
 
