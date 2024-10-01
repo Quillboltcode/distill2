@@ -32,14 +32,26 @@ class LitModel(LightningModule):
                  temp=3, loss_coefficient=0.3,
                  feature_loss_coefficient=0.03,
                  save_path="checkpoints",
-                 
                  num_classes=7):
 
         super(LitModel, self).__init__()
         # self.args = args
         self.best_accuracy = 0.0
         self.best_loss = 9999
-        
+        # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.hparams.model_name = model_name
+        self.hparams.method = method
+        self.hparams.dataset = dataset
+        self.hparams.dataset_path = dataset_path
+        self.hparams.lr = lr
+        self.hparams.optimizer = optimizer
+        self.hparams.batch_size = batch_size
+        self.hparams.num_workers = num_workers
+        self.hparams.temp = temp
+        self.hparams.loss_coefficient = loss_coefficient
+        self.hparams.feature_loss_coefficient = feature_loss_coefficient
+        self.hparams.save_path = save_path
+        self.hparams.num_classes = num_classes
 
         # Setup model, loss, optimizer, and scheduler
         self.model = self.setup_model(model_name)
