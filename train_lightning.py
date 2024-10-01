@@ -18,7 +18,43 @@ import loss
 import net
 import logit_calibration
 
+class ResNetAdaptation(nn.Module):
+    def __init__(self, model_name, num_classes):
+        super().__init__()
+        self.num_classes = num_classes
+        self.model = self.setup_model(model_name)
+        self.adaptation_layers = None
+        self.adaptation_layers_initialized = False
 
+    def setup_model(self, model_name):
+        if model_name == "resnet18":
+            model = net.resnet18(num_classes=self.num_classes)
+        elif model_name == "resnet34":
+            model = net.resnet34(num_classes=self.num_classes)
+        elif model_name == "resnet50":
+            model = net.resnet50(num_classes=self.num_classes)
+        elif model_name == "resnet101":
+            model = net.resnet101(num_classes=self.num_classes)
+        else:
+            raise NotImplementedError
+        return model
+
+    def init_adaptation_layers(self):
+        if not self.adaptation_layers_initialized:
+            dummy_input = torch.randn(1, 3, 224, 224)
+            _, outputs_feature = self.model(dummy_input)
+            layer_list = []
+            teacher_feature_size = outputs_feature[0].size(1)
+            for index in range(1, len(outputs_feature)):
+                student_feature_size = outputs_feature[index].size(1)
+                layer_list.append(nn.Linear(student_feature_size, teacher_feature_size))
+            self.adaptation_layers = nn.ModuleList(layer_list)
+            self.adaptation_layers_initialized = True
+
+    def forward(self, x):
+        if not self.adaptation_layers_initialized:
+            self.init_adaptation_layers()
+        return self.model(x) 
 
 
 class LitModel(LightningModule):
@@ -65,36 +101,9 @@ class LitModel(LightningModule):
         # self.test_step_outputs = []
 
     def setup_model(self, model_name):
-        if model_name == "resnet18":
-            model = net.resnet18(num_classes=self.hparams.num_classes)
-        elif model_name == "resnet34":
-            model = net.resnet34(num_classes=self.hparams.num_classes)
-        elif model_name == "resnet50":
-            model = net.resnet50(num_classes=self.hparams.num_classes)
-        elif model_name == "resnet101":
-            model = net.resnet101(num_classes=self.hparams.num_classes)
-        else:
-            raise NotImplementedError
-        return model
+        return ResNetAdaptation(model_name, self.hparams.num_classes)
 
-    def setup(self, stage=None):
-        # Initialize adaptation layers during setup, before training or validation
-        if not self.adaptation_layers_initialized:
-            self.init_adaptation_layers()
 
-    def init_adaptation_layers(self):
-        # Initialize adaptation layers based on the size of outputs_feature
-        self.model = self.model.to(self.device)
-        dummy_input = torch.randn(1, 3, 224, 224).to(self.device)
-        _, outputs_feature = self.model(dummy_input)
-
-        layer_list = []
-        teacher_feature_size = outputs_feature[0].size(1)
-        for index in range(1, len(outputs_feature)):
-            student_feature_size = outputs_feature[index].size(1)
-            layer_list.append(nn.Linear(student_feature_size, teacher_feature_size))
-        self.model.adaptation_layers = nn.ModuleList(layer_list).to(self.device)
-        self.adaptation_layers_initialized = True
 
     def setup_loss(self, loss_name):
         if loss_name == "CrossEntropy":
@@ -144,8 +153,7 @@ class LitModel(LightningModule):
         outputs, outputs_feature = self.model(inputs)
 
         # Initialize adaptation layers if not done
-        if not self.adaptation_layers_initialized:
-            self.init_adaptation_layers()
+
 
         # Loss calculation
         loss = torch.FloatTensor([0.]).to(self.device)
@@ -202,8 +210,7 @@ class LitModel(LightningModule):
         inputs, labels = batch
         outputs, outputs_feature = self.model(inputs)
 
-        if not self.adaptation_layers_initialized:
-            self.init_adaptation_layers()
+
         total_loss = 0.0
         correct = [0] * 4
         total = float(labels.size(0))
@@ -355,7 +362,7 @@ if __name__ == "__main__":
     # Training
     trainer.fit(model)
     # Load best model
-    model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path,strict=False)
+    model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path)
     # checkpoint = torch.load(ckpt_callback.best_model_path, map_location=lambda storage, loc: storage)
     # state_dict = checkpoint['state_dict']
 
