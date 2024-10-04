@@ -25,6 +25,9 @@ class Loca(nn.Module):
         
         # Create a tensor for calibrated logits
         calibrated_logits = torch.zeros_like(teacher_logits)
+
+        # Ensure true_labels is of type long
+        true_labels = true_labels.long()
         
         # Iterate over each sample
         for i in range(teacher_logits.size(0)):

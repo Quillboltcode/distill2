@@ -357,14 +357,10 @@ if __name__ == "__main__":
     # Training
     trainer.fit(model)
     # Load best model
-    print(ckpt_callback.best_model_path)
+    # print(ckpt_callback.best_model_path)
     model = LitModel.load_from_checkpoint(ckpt_callback.best_model_path)
     
-    # checkpoint = torch.load(ckpt_callback.best_model_path, map_location=lambda storage, loc: storage)
-    # state_dict = checkpoint['state_dict']
 
-    # model.load_state_dict(state_dict,strict=False)
-    # model.load_state_dict(checkpoint['state_dict'])
     model.eval()
     # print(model)
     trainer.test(model)
