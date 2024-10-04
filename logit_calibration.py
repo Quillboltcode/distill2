@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 
 # Define the logit calibration function
 # Does this run in GPU?
@@ -97,4 +97,26 @@ class LogitCalibration2(nn.Module):
         return calibrated_logits, teachertemp
 
 if __name__ == '__main__':
-    pass
+    # Test Loca
+        # Test 2 method of logit calibration for teacher model
+    # set random seed
+    torch.manual_seed(0)
+    calibrated_fn = Loca(0.9)
+    teacher_logits = torch.randn(10, 10)
+    true_labels = torch.randint(0, 10, (10,))
+    student_logits  = torch.randn(10, 10)
+
+    calibrated_logits= calibrated_fn(teacher_logits, true_labels)
+    # print(temp/)
+    print(calibrated_logits)
+    # calculate the loss using kl divergence between student and 
+    # use the temp to change softmax temperature
+    loss = 0
+    # for i in range(10):
+    #     loss += F.kl_div(F.log_softmax(student_logits[i]/temp[i], dim=0), F.softmax(calibrated_logits[i]/temp[i], dim=0), reduction='batchmean')
+    #     print(loss)
+
+    # loss = F.kl_div(F.log_softmax(student_logits/temp, dim=1), F.softmax(calibrated_logits/temp, dim=1), reduction='batchmean')
+    print(loss)
+    new_loss = F.kl_div(F.log_softmax(student_logits, dim=1), F.softmax(calibrated_logits, dim=1), reduction='batchmean')
+    print(new_loss)

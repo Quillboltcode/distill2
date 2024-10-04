@@ -229,6 +229,13 @@ class LitModel(LightningModule):
                     reduction='batchmean'
                 ) * self.hparams.loss_coefficient
                 loss += self.criterion(outputs[index], labels) * (1 - self.hparams.loss_coefficient)
+            elif self.hparams.method == "Loca":
+                loss += F.kl_div(
+                    F.log_softmax(outputs[index] , dim=1),
+                    F.softmax(calibrated_logit , dim=1),
+                    reduction='batchmean'
+                ) * self.hparams.loss_coefficient
+                loss += self.criterion(outputs[index], labels) * (1 - self.hparams.loss_coefficient)
             else:
                 loss += self.loss_fn(outputs[index], teacher_output) * self.hparams.loss_coefficient
                 loss += self.criterion(outputs[index], labels) * (1 - self.hparams.loss_coefficient)
