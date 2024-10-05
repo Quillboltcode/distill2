@@ -358,7 +358,7 @@ if __name__ == "__main__":
             ckpt_callback,
             lr_monitor], 
         accelerator='gpu',            # Use GPU accelerator
-    strategy='ddp_find_unused_parameters_true' if torch.cuda.device_count() > 1 else 'ddp', 
+    strategy='ddp_find_unused_parameters_true' if torch.cuda.device_count() > 1 else 'auto', 
     devices=args.gpu if torch.cuda.device_count() == 1 else torch.cuda.device_count(),  # Automatically detect the number of available GPUs)
     )
     # Training
